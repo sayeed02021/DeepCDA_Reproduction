@@ -11,8 +11,10 @@ class CrossAttention_paper(nn.Module):
             lstm_out_dim:int
     ):
         super().__init__()
-        self.W1 = nn.Parameter(torch.randn(lstm_out_dim,lstm_out_dim))
-        self.W2 = nn.Parameter(torch.randn(lstm_out_dim, lstm_out_dim))
+        self.W1 = nn.Parameter(torch.randn(lstm_out_dim,lstm_out_dim)/(lstm_out_dim**0.5))
+        self.W2 = nn.Parameter(torch.randn(lstm_out_dim, lstm_out_dim)/(lstm_out_dim**0.5))
+        nn.init.xavier_uniform_(self.W1)
+        nn.init.xavier_uniform_(self.W2)
         self.lstm_out_dim = lstm_out_dim
 
     
@@ -48,16 +50,39 @@ class CrossAttention_paper(nn.Module):
         F = torch.cat([F_p, F_d], dim=-1) # B,2d
 
         return F
+    
 
+class FCN(nn.Module):
+    """Final connected network for computing affinity
+    
+    :param in_features: input features
+    """
+    def __init__(self, in_features):
+        super().__init__()
+        self.fcn = nn.Sequential(
+            nn.Linear(in_features, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(1024, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Linear(512,1)
+        )
 
-
-
-
-
-
-
-
-
+    def forward(self, descriptor):
+        """
+        :param descriptor: (B,D) fragment descriptor
+        
+        :return affinity: (B,1) predicts the affinity
+        """
+        affinity = self.fcn(descriptor)
+        return affinity
+    
 
 
 class DeepCDA(nn.Module):
@@ -79,6 +104,7 @@ class DeepCDA(nn.Module):
             protein_k: int,
             smiles_k: int
     ):
+        super().__init__()
         
         ## First convolution + LSTM for drugs
         self.drug_embedder = nn.Embedding(
@@ -120,19 +146,8 @@ class DeepCDA(nn.Module):
             batch_first=True
         )
 
-        self.td_lstm = nn.Linear(
-            in_features = out_dim*3,
-            out_features = out_dim*3,
-            bias=False
-        )
-
-        self.td_conv = nn.Linear(
-            in_features = out_dim*3,
-            out_features = out_dim*3,
-            bias=False
-        )
-
         self.att = CrossAttention_paper(lstm_out_dim=3*out_dim)
+        self.pred_layer = FCN(in_features=6*out_dim)
 
     
     def forward(self, drug_seq, protein_seq):
@@ -148,24 +163,30 @@ class DeepCDA(nn.Module):
 
         drug_x = self.drug_conv(drug_embedding.permute(0,2,1)) # B, out_dim*3, L_d'
         drug_conv = drug_x.permute(0,2,1) # B, L_d', out_dim*3
-        drug_lstm = self.drug_lstm(drug_conv) # B, L_d', out_dim*3
+        drug_lstm, _ = self.drug_lstm(drug_conv) # B, L_d', out_dim*3
 
 
-        protein_x = self.protein_conv(protein_embedding)# B, out_dim*3, L_p'
+        protein_x = self.protein_conv(protein_embedding.permute(0,2,1))# B, out_dim*3, L_p'
         protein_conv =protein_x.permute(0,2,1) # B, L_p', out_dim*3
-        protein_lstm = self.protein_lstm(protein_conv) # B, L_p', out_dim*3
+        protein_lstm,_ = self.protein_lstm(protein_conv) # B, L_p', out_dim*3
 
+        # print(drug_lstm.shape, protein_lstm.shape)
         F = self.att(
             protein_lstm, drug_lstm
         )
+        
+        affinity = self.pred_layer(F)
+        return affinity
 
         
 
 
 if __name__=='__main__':
 
-    from dataset import ProteinCompoudDataset, getdata
+    from dataset import getdata
     from torch.utils.data import DataLoader
+    from tqdm import tqdm
+    import torch.nn.functional as F
     train_data = getdata(dataset_name='davis', mode='train', fold=0)
     train_loader = DataLoader(train_data, batch_size=128)
 
@@ -173,12 +194,46 @@ if __name__=='__main__':
         smiles_dict_len=64,
         protein_dict_len=25,
         embedding_size=256,
+        out_dim=64,
+        protein_k=8,
+        smiles_k=8
     )
 
+    device = torch.device('mps')
+    model = model.to(device)
 
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+    criterion = nn.MSELoss()
+    model.eval()
 
-        
+    # d,p,a = train_data[0]
+    # d,p,a = d.to(device), p.to(device), a.to(device)
+    # aff = model(d.unsqueeze(0), p.unsqueeze(0))
+    
+    for epoch in range(100):
+        pbar = tqdm(train_loader, desc=f'Epoch={epoch+1}' ,dynamic_ncols=True, leave=False)
+        total_loss = 0
+        for idx, (d,p,a) in enumerate(pbar):
+            optimizer.zero_grad()
+            d,p,a = d.to(device), p.to(device), a.to(device)
 
+            aff = model(
+                drug_seq=d,
+                protein_seq=p
+            )
 
+            # print(a,aff)
 
+            
+            loss = F.mse_loss(a, aff.squeeze())
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
 
+            total_loss+=loss.item()
+            pbar.set_postfix(
+                {
+                    'Loss': total_loss/(idx+1)
+                }
+            )
+        pbar.close()
