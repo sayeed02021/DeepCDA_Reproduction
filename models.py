@@ -1,0 +1,184 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class CrossAttention_paper(nn.Module):
+    """Implementing cross attention given in the paper
+    """
+
+    def __init__(
+            self,
+            lstm_out_dim:int
+    ):
+        super().__init__()
+        self.W1 = nn.Parameter(torch.randn(lstm_out_dim,lstm_out_dim))
+        self.W2 = nn.Parameter(torch.randn(lstm_out_dim, lstm_out_dim))
+        self.lstm_out_dim = lstm_out_dim
+
+    
+
+    def forward(
+            self,
+            protein_lstm:torch.Tensor,
+            drug_lstm:torch.Tensor
+    ):
+        """
+        :param protein_lstm: (B, lp, d) output of lstm for protein
+        :param drug_lstm: (B, ld, d) output of lstm for drug
+        
+        :return F: (B,2d) fragment descriptor 
+        """        
+        B,lp,d = protein_lstm.shape
+        B,ld,d = drug_lstm.shape
+
+        if d!=self.lstm_out_dim:
+            raise ValueError('Output dim of tensors do not match model output dim')
+
+        op_hat = torch.mean(protein_lstm, dim=1, keepdim=True)  # B,1,d  
+        od_hat = torch.mean(drug_lstm, dim=1, keepdim=True)      # B,1,d
+
+        alpha1 = torch.einsum('bpd, de, bld->bpl', protein_lstm, self.W1, drug_lstm) # B,lp,ld
+        alpha2 = torch.einsum('bid, de, bjd->bij', op_hat, self.W2, od_hat) # B,1,1
+
+        alpha = torch.sigmoid(alpha1)*torch.sigmoid(alpha2) # B,lp,ld
+
+
+        F_p = torch.einsum('bpl,bpd->bd', alpha, protein_lstm) # B,d
+        F_d = torch.einsum('bpl,bld->bd', alpha, drug_lstm) # B,d
+        F = torch.cat([F_p, F_d], dim=-1) # B,2d
+
+        return F
+
+
+
+
+
+
+
+
+
+
+
+
+class DeepCDA(nn.Module):
+    """Drug Target Interaction model. 
+    
+    :param smiles_dict_len: length of smiles token dictionary
+    :param protein_dict_len: length of protein token dictionary
+    :param embedding_size: size of embedding dimension
+    :param out_dim: channel size after first convolution
+    :param protein_k: kernel size for convolution with protein sequences
+    :param smiles_k: kernel size for convolution with smiles sequences
+    """
+    def __init__(
+            self,
+            smiles_dict_len: int,
+            protein_dict_len:  int,
+            embedding_size: int, 
+            out_dim: int,
+            protein_k: int,
+            smiles_k: int
+    ):
+        
+        ## First convolution + LSTM for drugs
+        self.drug_embedder = nn.Embedding(
+            num_embeddings=smiles_dict_len+1,
+            embedding_dim=embedding_size,
+            padding_idx=0
+        )
+        self.drug_conv = nn.Sequential(
+            nn.Conv1d(in_channels=embedding_size, out_channels=out_dim, kernel_size=smiles_k),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=out_dim, out_channels=2*out_dim, kernel_size=smiles_k),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=2*out_dim, out_channels=3*out_dim, kernel_size=smiles_k),
+            nn.ReLU()
+        )
+        self.drug_lstm = nn.LSTM(
+            input_size=3*out_dim,
+            hidden_size=3*out_dim,
+            batch_first=True
+        )
+
+        ## Now models for protein
+        self.protein_embedder = nn.Embedding(
+            num_embeddings=protein_dict_len,
+            embedding_dim=embedding_size,
+            padding_idx=0
+        )
+        self.protein_conv = nn.Sequential(
+            nn.Conv1d(in_channels=embedding_size, out_channels=out_dim, kernel_size=protein_k),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=out_dim, out_channels=2*out_dim, kernel_size=protein_k),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=2*out_dim, out_channels=3*out_dim, kernel_size=protein_k),
+            nn.ReLU()
+        )
+        self.protein_lstm = nn.LSTM(
+            input_size=3*out_dim,
+            hidden_size=3*out_dim,
+            batch_first=True
+        )
+
+        self.td_lstm = nn.Linear(
+            in_features = out_dim*3,
+            out_features = out_dim*3,
+            bias=False
+        )
+
+        self.td_conv = nn.Linear(
+            in_features = out_dim*3,
+            out_features = out_dim*3,
+            bias=False
+        )
+
+        self.att = CrossAttention_paper(lstm_out_dim=3*out_dim)
+
+    
+    def forward(self, drug_seq, protein_seq):
+        """
+        :param drug_seq: token2idx sequences of drugs(B, max_drug_seq_len(L_d)) 
+        :param protein_seq: token2idx sequences of proteins(B, max_protein_seq_len(L_p)) 
+
+        :return aff: model's affinity prediction
+        """
+
+        drug_embedding = self.drug_embedder(drug_seq) # B,L_d,E
+        protein_embedding = self.protein_embedder(protein_seq) # B,L_p,E
+
+        drug_x = self.drug_conv(drug_embedding.permute(0,2,1)) # B, out_dim*3, L_d'
+        drug_conv = drug_x.permute(0,2,1) # B, L_d', out_dim*3
+        drug_lstm = self.drug_lstm(drug_conv) # B, L_d', out_dim*3
+
+
+        protein_x = self.protein_conv(protein_embedding)# B, out_dim*3, L_p'
+        protein_conv =protein_x.permute(0,2,1) # B, L_p', out_dim*3
+        protein_lstm = self.protein_lstm(protein_conv) # B, L_p', out_dim*3
+
+        F = self.att(
+            protein_lstm, drug_lstm
+        )
+
+        
+
+
+if __name__=='__main__':
+
+    from dataset import ProteinCompoudDataset, getdata
+    from torch.utils.data import DataLoader
+    train_data = getdata(dataset_name='davis', mode='train', fold=0)
+    train_loader = DataLoader(train_data, batch_size=128)
+
+    model = DeepCDA(
+        smiles_dict_len=64,
+        protein_dict_len=25,
+        embedding_size=256,
+    )
+
+
+
+        
+
+
+
+
