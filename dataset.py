@@ -26,6 +26,34 @@ def load_mat_file(dataset_name: str, fold:int):
 
     return (train_drugs, train_proteins, train_y), (val_drugs, val_proteins, val_y), (test_drugs, test_proteins, test_y)
 
+def getloaders(dataset, fold, batch_size):
+    train_data = getdata(
+        dataset_name=dataset,
+        fold = fold, 
+        mode='train'
+    )
+    val_data = getdata(
+        dataset_name=dataset,
+        fold=fold, mode='val'
+    )
+    test_data = getdata(
+        dataset_name=dataset,
+        fold=fold, mode='test'
+    )
+    print("Length of train, val, test: ", len(train_data), len(val_data), len(test_data))
+    
+    train_loader = DataLoader(
+        train_data, batch_size=batch_size, shuffle=True
+    )
+    val_loader = DataLoader(
+        val_data, batch_size = batch_size, shuffle=False
+    )
+    test_loader = DataLoader(
+        test_data, batch_size = batch_size, shuffle=False
+    )
+    return train_loader, val_loader, test_loader
+
+
 
 def getdata(dataset_name:str, fold:int, mode:str='train'):
     train, val, test = load_mat_file(dataset_name=dataset_name, fold=fold)

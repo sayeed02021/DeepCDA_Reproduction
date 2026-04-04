@@ -1,0 +1,10 @@
+dataset: davis
+batch_size: 256
+n_folds: 5
+lr: 0.001
+n_epochs: 100
+embedding_size: 256
+out_dim: 64
+protein_k: 8
+smiles_k: 8
+device: cpu
