@@ -96,7 +96,7 @@ def main():
 
 
 
-        torch.save(model.state_dict(), f'model_fold_{fold+1}.pt')
+        # torch.save(model.state_dict(), f'model_fold_{fold+1}.pt')
 
 
 if __name__=='__main__':
