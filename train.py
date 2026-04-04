@@ -27,6 +27,35 @@ def train(model, loader, optimizer, criterion, epoch, device):
 
     pbar.close()
 
+    return total_loss/len(loader)
+
+
+def validate(model, loader, criterion, epoch, device):
+    model.eval()
+    pbar = tqdm(loader, desc=f'Val', dynamic_ncols=True, leave=False)
+    total_loss = 0
+    with torch.no_grad():
+        for idx, (d,p,a) in enumerate(pbar):
+            d,p,a = d.to(device),p.to(device),a.to(device)
+            
+            a_pred = model(
+                drug_seq = d,
+                protein_seq = p
+            )
+            loss = criterion(a_pred.squeeze(), a)
+            
+            total_loss +=loss.item()
+
+            pbar.set_postfix(
+                {
+                    'Loss': f'{total_loss/(idx+1):0.3f}'
+                }
+            )
+
+        pbar.close()
+
+    return total_loss/len(loader)
+
 
 
         

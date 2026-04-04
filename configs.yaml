@@ -7,4 +7,8 @@ embedding_size: 256
 out_dim: 64
 protein_k: 8
 smiles_k: 8
-device: cpu
+device: mps
+
+save_folder: ../own_results/davis
+patience: 15
+start_after: 15
