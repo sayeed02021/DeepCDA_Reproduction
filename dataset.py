@@ -26,11 +26,10 @@ def load_mat_file(dataset_name: str, fold:int):
 
     return (train_drugs, train_proteins, train_y), (val_drugs, val_proteins, val_y), (test_drugs, test_proteins, test_y)
 
-def getloaders(dataset, fold, batch_size):
+def getloaders(dataset, fold, batch_size, mode='train'):
     train_data = getdata(
         dataset_name=dataset,
-        fold = fold, 
-        mode='train'
+        fold=fold, mode='train'
     )
     val_data = getdata(
         dataset_name=dataset,

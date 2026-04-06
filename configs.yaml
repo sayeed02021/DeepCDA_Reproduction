@@ -1,14 +1,14 @@
 dataset: davis
 batch_size: 256
-n_folds: 5
-lr: 0.001
-n_epochs: 100
+n_folds: 3
+lr: [0.1, 0.01, 0.001, 0.0001]
+n_epochs: 1
 embedding_size: 256
-out_dim: 64
-protein_k: 8
-smiles_k: 8
+out_dim: [16, 32, 64, 128, 256]
+protein_k: [8, 12]
+smiles_k: [4, 6, 8]
 device: mps
 
-save_folder: ../own_results/davis
+save_folder: ../own_results2/davis
 patience: 15
 start_after: 15
