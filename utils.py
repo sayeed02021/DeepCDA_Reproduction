@@ -4,6 +4,8 @@ import random
 from collections import defaultdict
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import stats
+from sklearn.metrics import r2_score
 
 def seed_everything(seed: int):
     """
@@ -53,5 +55,38 @@ class Logger:
     def save(self):
         df = pd.DataFrame(self.tracker)
         df.to_csv(f"{self.save_folder}/{self.name}_metrics.csv")
+
+
+def r_squared(y_true, y_pred):
+    """Standard R² (with intercept)"""
+    r, _ = stats.pearsonr(y_true, y_pred)
+    return r ** 2
+
+def r0_squared(y_true, y_pred):
+    """R² with zero intercept (no bias term) via OLS through origin"""
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+    # Slope through origin: beta = sum(y_true * y_pred) / sum(y_pred^2)
+    beta = np.sum(y_true * y_pred) / np.sum(y_pred ** 2)
+    y_pred_0 = beta * y_pred
+    ss_res = np.sum((y_true - y_pred_0) ** 2)
+    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    return 1 - ss_res / ss_tot
+
+def compute_metrics(y_true:torch.Tensor, y_pred:torch.Tensor):
+    R = r_squared(y_true, y_pred)
+
+    R0 = r0_squared(y_true, y_pred).item()
+
+    Rm = R*(1-np.sqrt(R-R0))
+
+    r2 = r2_score(y_true, y_pred)
+
+    return R, Rm, r2
+
+
+
+
+
 
     

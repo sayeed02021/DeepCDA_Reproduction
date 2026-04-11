@@ -2,6 +2,71 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class CrossAttention_author(nn.Module):
+    """PyTorch reimplementation of the author's attention mechanism.
+    
+    Applied twice:
+        - Once on LSTM outputs  (protein_lstm, drug_lstm)
+        - Once on CNN outputs   (protein_cnn,  drug_cnn)
+    Then GlobalMaxPool each → concat → Add both branches.
+    """
+
+    def forward(
+        self,
+        protein_lstm: torch.Tensor,  # (B, lp, d)
+        drug_lstm: torch.Tensor,     # (B, ld, d)
+        protein_cnn: torch.Tensor,   # (B, lp', d)  (before LSTM, raw CNN output)
+        drug_cnn: torch.Tensor,      # (B, ld', d)
+    ) -> torch.Tensor:               # (B, 2d)
+
+        enc1 = self._attend_and_pool(protein_lstm, drug_lstm)   # (B, 2d)
+        enc2 = self._attend_and_pool(protein_cnn,  drug_cnn)    # (B, 2d)
+        return enc1 + enc2                                       # (B, 2d)  ← Add (skip connection)
+
+    def _attend_and_pool(
+        self,
+        protein: torch.Tensor,   # (B, lp, d)
+        drug: torch.Tensor,      # (B, ld, d)
+    ) -> torch.Tensor:           # (B, 2d)
+
+        # --- att_func ---
+        # scalar: sigmoid(mean_prot · mean_drug)
+        mean_prot = protein.mean(dim=1, keepdim=True)   # (B, 1, d)
+        mean_drug = drug.mean(dim=1, keepdim=True)      # (B, 1, d)
+        mean_all = torch.sigmoid(
+            torch.bmm(mean_prot, mean_drug.transpose(1, 2))  # (B, 1, 1)
+        )
+
+        # full attention map: sigmoid(prot @ drug.T) * scalar
+        att = torch.sigmoid(
+            torch.bmm(protein, drug.transpose(1, 2))    # (B, lp, ld)
+        ) * mean_all                                    # broadcast (B, lp, ld)
+
+        # --- coeff_fun_prot ---
+        # softmax over ld dim → weighted sum of protein fragments
+        att_prot = torch.softmax(
+            att.mean(dim=2, keepdim=True),              # (B, lp, 1)
+            dim=1
+        )                                               # (B, lp, 1)
+        weighted_prot = protein * att_prot              # (B, lp, d)
+
+        # --- coeff_fun_lig ---
+        # softmax over lp dim → weighted sum of drug fragments
+        att_drug = torch.softmax(
+            att.mean(dim=1, keepdim=True).transpose(1, 2),  # (B, ld, 1)
+            dim=1
+        )                                               # (B, ld, 1)
+        weighted_drug = drug * att_drug                 # (B, ld, d)
+
+        # --- GlobalMaxPooling ---
+        pooled_prot, _ = weighted_prot.max(dim=1)      # (B, d)
+        pooled_drug, _ = weighted_drug.max(dim=1)      # (B, d)
+
+        return torch.cat([pooled_prot, pooled_drug], dim=-1)  # (B, 2d)
+
+
+
+
 class CrossAttention_paper(nn.Module):
     """Implementing cross attention given in the paper
     """
@@ -102,11 +167,13 @@ class DeepCDA(nn.Module):
             embedding_size: int, 
             out_dim: int,
             protein_k: int,
-            smiles_k: int
+            smiles_k: int,
+            method_type: str
     ):
         super().__init__()
         
         ## First convolution + LSTM for drugs
+        self.method_type = method_type
         self.drug_embedder = nn.Embedding(
             num_embeddings=smiles_dict_len+1,
             embedding_dim=embedding_size,
@@ -145,8 +212,10 @@ class DeepCDA(nn.Module):
             hidden_size=3*out_dim,
             batch_first=True
         )
-
-        self.att = CrossAttention_paper(lstm_out_dim=3*out_dim)
+        if method_type == 'paper':
+            self.att = CrossAttention_paper(lstm_out_dim=3*out_dim)
+        elif method_type=='github':
+            self.att = CrossAttention_author()
         self.pred_layer = FCN(in_features=6*out_dim)
 
     
@@ -171,9 +240,17 @@ class DeepCDA(nn.Module):
         protein_lstm,_ = self.protein_lstm(protein_conv) # B, L_p', out_dim*3
 
         # print(drug_lstm.shape, protein_lstm.shape)
-        F = self.att(
+        if self.method_type=='paper':
+            F = self.att(
             protein_lstm, drug_lstm
-        )
+            )
+        elif self.method_type=='github':
+            F = self.att(
+               protein_lstm, 
+               drug_lstm,
+               protein_conv,
+               drug_conv 
+            )
         
         affinity = self.pred_layer(F)
         return affinity
