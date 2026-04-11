@@ -15,3 +15,4 @@ start_after: 15
 
 train: False
 test: True
+method: paper

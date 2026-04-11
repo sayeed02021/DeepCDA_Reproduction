@@ -48,7 +48,8 @@ def train_per_setting(fold, protein_k, smiles_k, lr, out_dim, save_folder, args)
         embedding_size=args.embedding_size,
         out_dim = out_dim,
         protein_k=protein_k,
-        smiles_k=smiles_k
+        smiles_k=smiles_k,
+        method_type=args.method
     )
 
     
@@ -101,7 +102,8 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args):
         embedding_size=args.embedding_size,
         out_dim = out_dim,
         protein_k=protein_k,
-        smiles_k=smiles_k
+        smiles_k=smiles_k,
+        method_type=args.method
     )
     train_loader, val_loader, test_loader = getloaders(args.dataset, 
                                                        0,
@@ -123,7 +125,24 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args):
     
     mse = F.mse_loss(all_preds_fold_wise.mean(dim=0).squeeze(), all_targets)
     R,_,r2 = compute_metrics(all_targets, averaged_preds)
-    print(mse, R, Rm_fold_wise.mean(), Rm_fold_wise.std(), r2)
+    print("mse, pearson, rm^2(mean and std), r2_score: ", mse, R, Rm_fold_wise.mean(), Rm_fold_wise.std(), r2)
+    data = {}
+    data['name'] = ['DAVIS_paper_code']
+    data['Pearson'] = [R]
+    data['MSE'] = [mse.item()]
+    data['r2'] = r2
+    data['rm_sq_mean'] = [Rm_fold_wise.mean()]
+    data['rm_sq_std'] = [Rm_fold_wise.std()]
+    df = pd.DataFrame(data)
+    if os.path.exists('metrics.csv'):
+        original_data = pd.read_csv('metrics.csv')
+        original_data = pd.concat([original_data, df])
+        original_data.to_csv('metrics.csv', index=False)
+    else:
+        df.to_csv('metrics.csv', index=False)
+
+
+
     
 
 
@@ -162,11 +181,14 @@ def main():
                                 args=args
                             )
     if args.test:
+        i=0
         for protein_k in args.protein_k:
             for smiles_k in args.smiles_k:
                 for out_dim in args.out_dim:
                     for lr in args.lr:  
-                        save_folder = args.save_folder # change this if using anyother folder like args.save_folder + "SETTING_1" etc
+                        # save_folder = args.save_folder+f'/SETTING_{i+1}' # change this if using anyother folder like args.save_folder + "SETTING_1" etc
+                        save_folder = args.save_folder 
+                        i+=1
                         test_and_compute_metrics(
                             protein_k=protein_k,
                             smiles_k=smiles_k,
@@ -174,14 +196,6 @@ def main():
                             save_folder=save_folder,
                             args=args
                         )      
-
-
-
-
-
-
-        
-
 
 if __name__=='__main__':
     main()
