@@ -69,7 +69,8 @@ def train_per_setting(fold, protein_k, smiles_k, lr, out_dim, save_folder, args)
             model=model, 
             loader=val_loader,
             criterion=torch.nn.MSELoss(),
-            epoch=epoch, device=args.device
+            epoch=epoch, device=args.device,
+            batch_fraction=args.batch_ratio
         )
         logger.update(fold+1, 'fold')
         logger.update(epoch+1, 'epoch')

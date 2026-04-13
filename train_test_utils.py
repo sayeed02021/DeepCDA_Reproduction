@@ -102,7 +102,7 @@ def validate(model, loader, criterion, epoch, device, batch_fraction):
 
         pbar.close()
 
-    return total_loss/len(loader)
+    return total_loss/tracked_batches
 
 
 
