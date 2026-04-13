@@ -62,7 +62,8 @@ def train_per_setting(fold, protein_k, smiles_k, lr, out_dim, save_folder, args)
             optimizer=optimizer,
             criterion=torch.nn.MSELoss(),
             device=args.device,
-            epoch=epoch+1
+            epoch=epoch+1,
+            batch_fraction=args.batch_ratio
         )
         val_loss = validate(
             model=model, 
