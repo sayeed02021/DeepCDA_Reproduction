@@ -219,8 +219,9 @@ class DeepCDA(nn.Module):
         self.pred_layer = FCN(in_features=6*out_dim)
 
     
-    def forward(self, drug_seq, protein_seq):
+    def forward(self, drug_seq, protein_seq) -> torch.Tensor:
         """
+
         :param drug_seq: token2idx sequences of drugs(B, max_drug_seq_len(L_d)) 
         :param protein_seq: token2idx sequences of proteins(B, max_protein_seq_len(L_p)) 
 
@@ -253,14 +254,46 @@ class DeepCDA(nn.Module):
             )
         
         affinity = self.pred_layer(F)
-        return affinity
+        return F, affinity
+    
+
+class Discriminator(nn.Module):
+    """
+    Discriminator for domain adaptation
+
+    :param in_features: (6*out_dim) dimnesion of input features
+    """
+    def __init__(self, in_features: int):
+        super().__init__()
+
+        self.net = nn.Sequential(
+            nn.Linear(in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256,2)
+        )
+
+
+    def forward(self, F:torch.Tensor) -> torch.Tensor:
+        """
+        :param F: (B,in_features) encoder output
+        :return: (B,1) prob if F is from in distribution or not
+        """
+
+        return self.net(F)
+
+
+
 
         
 
 
 if __name__=='__main__':
 
-    from dataset import getdata
+    from DeepCDA_own.dataset import getdata
     from torch.utils.data import DataLoader
     from tqdm import tqdm
     import torch.nn.functional as F

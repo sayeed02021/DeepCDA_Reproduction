@@ -6,3 +6,5 @@ __pycache__/
 .DS_Store
 metrics.csv
 local_configs.yaml
+ada_config.yaml
+get_requirements_txt_file.sh

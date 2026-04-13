@@ -12,7 +12,7 @@ def train(model, loader, optimizer, criterion, epoch, device):
     for idx, (d,p,a) in enumerate(pbar):
         d,p,a = d.to(device),p.to(device),a.to(device)
         optimizer.zero_grad()
-        a_pred = model(
+        F, a_pred = model(
             drug_seq = d,
             protein_seq = p
         )
@@ -40,7 +40,7 @@ def validate(model, loader, criterion, epoch, device):
         for idx, (d,p,a) in enumerate(pbar):
             d,p,a = d.to(device),p.to(device),a.to(device)
             
-            a_pred = model(
+            F, a_pred = model(
                 drug_seq = d,
                 protein_seq = p
             )
@@ -86,7 +86,7 @@ def test(loader: torch.utils.data.DataLoader,
                 m.to(device)
                 m.eval()
 
-                a_pred = m(
+                F, a_pred = m(
                     drug_seq = d,
                     protein_seq = p
                 )
