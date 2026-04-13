@@ -67,12 +67,22 @@ def train(model, loader, optimizer, criterion, epoch, device, batch_fraction=1.0
     return total_loss / trained_batches
 
 
-def validate(model, loader, criterion, epoch, device):
+def validate(model, loader, criterion, epoch, device, batch_fraction):
     model.eval()
-    pbar = tqdm(loader, desc=f'Val', dynamic_ncols=True, leave=False)
+    # Randomly sample a fraction of batch indices
+    total_batches = len(loader)
+    num_batches = max(1, int(total_batches * batch_fraction))
+
+    selected_indices = set(random.sample(range(total_batches), num_batches))
+
+    pbar = tqdm(total=num_batches, desc=f'Epoch: {epoch}', dynamic_ncols=True, leave=False)
     total_loss = 0
+
+    tracked_batches=0
     with torch.no_grad():
         for idx, (d,p,a) in enumerate(pbar):
+            if idx not in selected_indices:
+                continue
             d,p,a = d.to(device),p.to(device),a.to(device)
             
             F, a_pred = model(
@@ -82,10 +92,11 @@ def validate(model, loader, criterion, epoch, device):
             loss = criterion(a_pred.squeeze(), a)
             
             total_loss +=loss.item()
+            tracked_batches+=1
 
             pbar.set_postfix(
                 {
-                    'Loss': f'{total_loss/(idx+1):0.3f}'
+                    'Loss': f'{total_loss/(tracked_batches+1):0.3f}'
                 }
             )
 
