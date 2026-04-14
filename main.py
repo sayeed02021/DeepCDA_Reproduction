@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-
+import itertools
 import argparse
 import yaml
 
@@ -98,6 +98,13 @@ def train_per_setting(fold, protein_k, smiles_k, lr, out_dim, save_folder, args)
 
 
 def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args, scaler):
+
+    if args.dataset=='kiba':
+        threshold=12.1
+    elif args.dataset=='davis':
+        threshold=7.0
+
+
     model = DeepCDA(
         smiles_dict_len=64,
         protein_dict_len=25,
@@ -110,47 +117,68 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args, sc
     train_loader, val_loader, test_loader = getloaders(args.dataset, 
                                                        0,
                                                        args.batch_size)
+    
+    # test_loader = itertools.islice(test_loader, 10)
     all_targets, all_preds_fold_wise = test(
         loader = test_loader,
         model_folder = save_folder,
         model = model,
         device = args.device
-    )
+    ) # all_targets: (N, 1) # all_preds_fold_wise = (n_fold, N,1)
     averaged_preds = all_preds_fold_wise.mean(dim=0)
     n_folds = all_preds_fold_wise.shape[0]
+
+    current_device = all_targets.device
+    for fold in range(n_folds):
+        current_fold = all_preds_fold_wise[fold, :, :] # (N,1) 
+        current_fold = torch.tensor(scaler.inverse_transform(current_fold), device=current_device) # (N,1)
+        all_preds_fold_wise[fold, :, :] = current_fold 
+    
+    all_preds_fold_wise = all_preds_fold_wise.squeeze()
+    all_targets = torch.tensor(scaler.inverse_transform(all_targets), device=current_device).squeeze()
+
+
+    averaged_preds = all_preds_fold_wise.mean(dim=0)    
+
     Rm_fold_wise = np.zeros(n_folds)
+    ci_fold_wise = np.zeros(n_folds)
+    aupr_fold_wise = np.zeros(n_folds)
     for fold in range(n_folds):
         a_pred = all_preds_fold_wise[fold]
 
-        R,Rm,r2 = compute_metrics(scaler.inverse_transform(all_targets), scaler.inverse_transform(a_pred))
+        R,Rm,r2,aupr, ci_score = compute_metrics(all_targets, a_pred, threshold)
         
-        Rm_fold_wise[fold] = Rm[0]
-    all_preds_unscaled = torch.tensor(scaler.inverse_transform(all_preds_fold_wise.mean(dim=0))).squeeze()
-    all_targets_unscaled = torch.tensor(scaler.inverse_transform(all_targets)).squeeze()
+        Rm_fold_wise[fold] = Rm
+        ci_fold_wise[fold] = ci_score.item()
+        aupr_fold_wise[fold] = aupr
+
     
-    print(type(all_preds_unscaled))
-    print(type(all_targets_unscaled))
-    print(type(all_preds_unscaled.size))    # should say <built-in method size ...>
-    print(type(all_targets_unscaled.size))  # if this prints <class 'int'>, that's your culprit
-    print(all_preds_unscaled.shape)
-    print(all_targets_unscaled.shape)
-    mse = F.mse_loss(all_preds_unscaled, all_targets_unscaled).item()
-    R,_,r2 = compute_metrics(all_preds_unscaled, all_targets_unscaled)
-    print("mse, pearson, rm^2(mean and std), r2_score: ", mse, R, Rm_fold_wise.mean(), Rm_fold_wise.std(), r2)
+    mse = F.mse_loss(averaged_preds, all_targets).item()
+    R,_,r2,aupr, ci_score = compute_metrics(all_targets, averaged_preds, threshold)
+    print("mse, pearson, rm^2(mean and std), ci(mean, std), aupr(mean,std1) r2_score: ", mse, R, Rm_fold_wise.mean(), Rm_fold_wise.std(), r2)
     data = {}
-    data['name'] = ['DAVIS_github_small_model']
+    data['Dataset'] = [args.dataset]
+    data['method'] = [args.method]
+    data['protein_k'] = [protein_k]
+    data['smiles_k'] = [smiles_k]
+    data['out_dim'] = [out_dim]
+    data['embedding_size'] = [args.embedding_size]
     data['Pearson'] = [R]
     data['MSE'] = [mse]
     data['r2'] = r2
     data['rm_sq_mean'] = [Rm_fold_wise.mean()]
     data['rm_sq_std'] = [Rm_fold_wise.std()]
+    data['ci_sq_mean'] = [ci_fold_wise.mean()]
+    data['ci_sq_std'] = [ci_fold_wise.std()]
+    data['aupr_sq_mean'] = [ci_fold_wise.mean()]
+    data['aupr_sq_std'] = [ci_fold_wise.std()]
     df = pd.DataFrame(data)
-    if os.path.exists('metrics.csv'):
-        original_data = pd.read_csv('metrics.csv')
+    if os.path.exists('metrics_updated.csv'):
+        original_data = pd.read_csv('metrics_updated.csv')
         original_data = pd.concat([original_data, df])
-        original_data.to_csv('metrics.csv', index=False)
+        original_data.to_csv('metrics_updated.csv', index=False)
     else:
-        df.to_csv('metrics.csv', index=False)
+        df.to_csv('metrics_updated.csv', index=False)
 
 
 
