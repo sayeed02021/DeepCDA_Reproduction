@@ -2,6 +2,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import scipy
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+import os
+from utils import save_pkl, load_pkl
 ## dataset util functions
 
 def load_mat_file(dataset_name: str, fold:int):
@@ -9,20 +12,38 @@ def load_mat_file(dataset_name: str, fold:int):
         path = '../Data_folded/Davis/Davis_Dataset_folded.mat'
     elif dataset_name.lower()=='kiba':
         path = '../Data_folded/KIBA/KIBA_Dataset_folded.mat'
+    else:
+        raise ValueError("Dataset not available")
     
     data = scipy.io.loadmat(path) 
     train_drugs = data['train_folds_drugs'][fold] # n_fold, n, compound_seq_len
     train_proteins = data['train_folds_proteins'][fold] # n_fold, n, protein_seq_len
     train_y = data['train_folds_affinity'][fold] # n_fold, n 
 
+    if not os.path.exists(f'../Data_folded/{dataset_name}_scaler.pkl'):
+        scaler = StandardScaler()
+        train_y_all = data['train_folds_affinity']
+        train_y_all = np.concatenate(train_y_all, axis=0)
+        print(train_y_all.shape)
+        scaler.fit(train_y_all[:,None])
+        save_pkl(scaler, f'../Data_folded/{dataset_name}_scaler.pkl')
+    else:
+        scaler = load_pkl(f'../Data_folded/{dataset_name}_scaler.pkl')
+
+    
+    train_y = scaler.transform(train_y[:,None])
+
+
     val_drugs = data['val_folds_drugs'][fold] # n_fold, n, compound_seq_len
     val_proteins = data['val_folds_proteins'][fold] # n_fold, n, protein_seq_len
-    val_y = data['val_folds_affinity'][fold] # n_fold, n 
+    val_y = data['val_folds_affinity'][fold][:,None] # n_fold, n 
+    val_y = scaler.transform(val_y)
 
 
     test_drugs = data['test_folds_drugs'][fold] # n_fold, n, compound_seq_len
     test_proteins = data['test_folds_proteins'][fold] # n_fold, n, protein_seq_len
-    test_y = data['test_folds_affinity'][fold] # n_fold, n 
+    test_y = data['test_folds_affinity'][fold][:,None] # n_fold, n 
+    test_y = scaler.transform(test_y)
 
     return (train_drugs, train_proteins, train_y), (val_drugs, val_proteins, val_y), (test_drugs, test_proteins, test_y)
 

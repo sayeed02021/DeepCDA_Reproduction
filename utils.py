@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
 from sklearn.metrics import r2_score
+import pickle
 
 def seed_everything(seed: int):
     """
@@ -84,6 +85,14 @@ def compute_metrics(y_true:torch.Tensor, y_pred:torch.Tensor):
 
     return R, Rm, r2
 
+def save_pkl(obj, path):
+    with open(path, "wb") as f:
+        pickle.dump(obj, f)
+
+def load_pkl(path):
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    return data
 
 
 

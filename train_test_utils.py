@@ -6,32 +6,6 @@ import glob
 import copy
 import random
 
-# def train(model, loader, optimizer, criterion, epoch, device):
-#     model.train()
-#     pbar = tqdm(loader, desc=f'Epoch: {epoch}', dynamic_ncols=True, leave=False)
-#     total_loss = 0
-#     for idx, (d,p,a) in enumerate(pbar):
-#         d,p,a = d.to(device),p.to(device),a.to(device)
-#         optimizer.zero_grad()
-#         F, a_pred = model(
-#             drug_seq = d,
-#             protein_seq = p
-#         )
-#         loss = criterion(a_pred.squeeze(), a)
-#         loss.backward()
-#         optimizer.step()
-#         total_loss +=loss.item()
-
-#         pbar.set_postfix(
-#             {
-#                 'Loss': f'{total_loss/(idx+1):0.3f}'
-#             }
-#         )
-
-#     pbar.close()
-
-#     return total_loss/len(loader)
-
 def train(model, loader, optimizer, criterion, epoch, device, batch_fraction=1.0):
     model.train()
     
@@ -54,7 +28,7 @@ def train(model, loader, optimizer, criterion, epoch, device, batch_fraction=1.0
             drug_seq=d,
             protein_seq=p
         )
-        loss = criterion(a_pred.squeeze(), a)
+        loss = criterion(a_pred.squeeze(), a.squeeze())
         loss.backward()
         optimizer.step()
 
@@ -89,7 +63,7 @@ def validate(model, loader, criterion, epoch, device, batch_fraction):
                 drug_seq = d,
                 protein_seq = p
             )
-            loss = criterion(a_pred.squeeze(), a)
+            loss = criterion(a_pred.squeeze(), a.squeeze())
             
             total_loss +=loss.item()
             tracked_batches+=1

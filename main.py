@@ -10,7 +10,7 @@ import yaml
 
 
 from dataset import getloaders
-from utils import seed_everything, Logger, compute_metrics
+from utils import seed_everything, Logger, compute_metrics, load_pkl
 from train_test_utils import train, validate, test
 from models import DeepCDA
 
@@ -97,7 +97,7 @@ def train_per_setting(fold, protein_k, smiles_k, lr, out_dim, save_folder, args)
             break
 
 
-def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args):
+def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args, scaler):
     model = DeepCDA(
         smiles_dict_len=64,
         protein_dict_len=25,
@@ -116,22 +116,31 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args):
         model = model,
         device = args.device
     )
-    averaged_preds = all_preds_fold_wise.mean(dim=0).squeeze()
+    averaged_preds = all_preds_fold_wise.mean(dim=0)
     n_folds = all_preds_fold_wise.shape[0]
     Rm_fold_wise = np.zeros(n_folds)
     for fold in range(n_folds):
         a_pred = all_preds_fold_wise[fold]
 
-        R,Rm,r2 = compute_metrics(all_targets, a_pred.squeeze())
-        Rm_fold_wise[fold] = Rm
+        R,Rm,r2 = compute_metrics(scaler.inverse_transform(all_targets), scaler.inverse_transform(a_pred))
+        
+        Rm_fold_wise[fold] = Rm[0]
+    all_preds_unscaled = torch.tensor(scaler.inverse_transform(all_preds_fold_wise.mean(dim=0))).squeeze()
+    all_targets_unscaled = torch.tensor(scaler.inverse_transform(all_targets)).squeeze()
     
-    mse = F.mse_loss(all_preds_fold_wise.mean(dim=0).squeeze(), all_targets)
-    R,_,r2 = compute_metrics(all_targets, averaged_preds)
+    print(type(all_preds_unscaled))
+    print(type(all_targets_unscaled))
+    print(type(all_preds_unscaled.size))    # should say <built-in method size ...>
+    print(type(all_targets_unscaled.size))  # if this prints <class 'int'>, that's your culprit
+    print(all_preds_unscaled.shape)
+    print(all_targets_unscaled.shape)
+    mse = F.mse_loss(all_preds_unscaled, all_targets_unscaled).item()
+    R,_,r2 = compute_metrics(all_preds_unscaled, all_targets_unscaled)
     print("mse, pearson, rm^2(mean and std), r2_score: ", mse, R, Rm_fold_wise.mean(), Rm_fold_wise.std(), r2)
     data = {}
-    data['name'] = ['DAVIS_paper_code']
+    data['name'] = ['DAVIS_github_small_model']
     data['Pearson'] = [R]
-    data['MSE'] = [mse.item()]
+    data['MSE'] = [mse]
     data['r2'] = r2
     data['rm_sq_mean'] = [Rm_fold_wise.mean()]
     data['rm_sq_std'] = [Rm_fold_wise.std()]
@@ -142,12 +151,6 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args):
         original_data.to_csv('metrics.csv', index=False)
     else:
         df.to_csv('metrics.csv', index=False)
-
-
-
-    
-
-
 
 
 
@@ -182,7 +185,9 @@ def main():
                                 save_folder=save_folder,
                                 args=args
                             )
+    
     if args.test:
+        scaler = load_pkl(f'../Data_folded/{args.dataset}_scaler.pkl')
         i=0
         for protein_k in args.protein_k:
             for smiles_k in args.smiles_k:
@@ -196,7 +201,8 @@ def main():
                             smiles_k=smiles_k,
                             out_dim=out_dim,
                             save_folder=save_folder,
-                            args=args
+                            args=args,
+                            scaler=scaler
                         )      
 
 if __name__=='__main__':
