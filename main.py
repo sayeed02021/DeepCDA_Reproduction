@@ -173,12 +173,12 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args, sc
     data['aupr_mean'] = [aupr_fold_wise.mean()]
     data['aupr_std'] = [aupr_fold_wise.std()]
     df = pd.DataFrame(data)
-    if os.path.exists('metrics_updated2.csv'):
-        original_data = pd.read_csv('metrics_updated2.csv')
+    if os.path.exists('metrics.csv'):
+        original_data = pd.read_csv('metrics.csv')
         original_data = pd.concat([original_data, df])
-        original_data.to_csv('metrics_updated2.csv', index=False)
+        original_data.to_csv('metrics.csv', index=False)
     else:
-        df.to_csv('metrics_updated2.csv', index=False)
+        df.to_csv('metrics.csv', index=False)
 
 
 

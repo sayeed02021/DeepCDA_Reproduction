@@ -1,0 +1,22 @@
+train_dataset: davis
+test_dataset: kiba
+batch_size: 64
+n_folds: 3
+lr_enc: 0.0001
+lr_disc: 0.001
+n_epochs: 1
+embedding_size: 256
+out_dim: 128
+protein_k: 8
+smiles_k: 4
+device: mps
+
+save_folder: ../own_results_final/davis_to_kiba_n_epoch_1_test_loader
+saved_model_folder: ../own_results_final/davis_github_batch_1.0/SETTING_1
+
+
+method: github
+batch_ratio: 0.6
+
+warmup_epochs: 0
+warmup_lr: 0.01
