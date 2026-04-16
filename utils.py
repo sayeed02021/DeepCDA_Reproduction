@@ -10,12 +10,6 @@ import pickle
 
 
 def seed_everything(seed: int):
-    """
-    Set seed for reproducibility across:
-    - Python random
-    - NumPy
-    - PyTorch (CPU + CUDA)s
-    """
 
     random.seed(seed)
     np.random.seed(seed)
@@ -24,7 +18,7 @@ def seed_everything(seed: int):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-    # Ensures deterministic CUDA ops (may slow down training)
+    
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -60,12 +54,12 @@ class Logger:
 
 
 def r_squared(y_true, y_pred):
-    """Standard R² (with intercept)"""
+    
     r, _ = pearsonr(y_true, y_pred)
     return r ** 2
 
 def r0_squared(y_true, y_pred):
-    """R² with zero intercept (no bias term) via OLS through origin"""
+    
     y_true = np.array(y_true)
     y_pred = np.array(y_pred)
     # Slope through origin: beta = sum(y_true * y_pred) / sum(y_pred^2)

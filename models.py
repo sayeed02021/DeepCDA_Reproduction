@@ -3,25 +3,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class CrossAttention_author(nn.Module):
-    """PyTorch reimplementation of the author's attention mechanism.
-    
-    Applied twice:
-        - Once on LSTM outputs  (protein_lstm, drug_lstm)
-        - Once on CNN outputs   (protein_cnn,  drug_cnn)
-    Then GlobalMaxPool each → concat → Add both branches.
+    """ Implementation of attention given in github
     """
 
     def forward(
         self,
         protein_lstm: torch.Tensor,  # (B, lp, d)
         drug_lstm: torch.Tensor,     # (B, ld, d)
-        protein_cnn: torch.Tensor,   # (B, lp', d)  (before LSTM, raw CNN output)
+        protein_cnn: torch.Tensor,   # (B, lp', d)  
         drug_cnn: torch.Tensor,      # (B, ld', d)
     ) -> torch.Tensor:               # (B, 2d)
 
         enc1 = self._attend_and_pool(protein_lstm, drug_lstm)   # (B, 2d)
         enc2 = self._attend_and_pool(protein_cnn,  drug_cnn)    # (B, 2d)
-        return enc1 + enc2                                       # (B, 2d)  ← Add (skip connection)
+        return enc1 + enc2                                       # (B, 2d) 
 
     def _attend_and_pool(
         self,
@@ -29,36 +24,34 @@ class CrossAttention_author(nn.Module):
         drug: torch.Tensor,      # (B, ld, d)
     ) -> torch.Tensor:           # (B, 2d)
 
-        # --- att_func ---
-        # scalar: sigmoid(mean_prot · mean_drug)
+        
+        
         mean_prot = protein.mean(dim=1, keepdim=True)   # (B, 1, d)
         mean_drug = drug.mean(dim=1, keepdim=True)      # (B, 1, d)
         mean_all = torch.sigmoid(
             torch.bmm(mean_prot, mean_drug.transpose(1, 2))  # (B, 1, 1)
         )
 
-        # full attention map: sigmoid(prot @ drug.T) * scalar
+        
         att = torch.sigmoid(
             torch.bmm(protein, drug.transpose(1, 2))    # (B, lp, ld)
-        ) * mean_all                                    # broadcast (B, lp, ld)
+        ) * mean_all                                    # (B, lp, ld)
 
-        # --- coeff_fun_prot ---
-        # softmax over ld dim → weighted sum of protein fragments
         att_prot = torch.softmax(
             att.mean(dim=2, keepdim=True),              # (B, lp, 1)
             dim=1
         )                                               # (B, lp, 1)
         weighted_prot = protein * att_prot              # (B, lp, d)
 
-        # --- coeff_fun_lig ---
-        # softmax over lp dim → weighted sum of drug fragments
+
+
         att_drug = torch.softmax(
             att.mean(dim=1, keepdim=True).transpose(1, 2),  # (B, ld, 1)
             dim=1
         )                                               # (B, ld, 1)
         weighted_drug = drug * att_drug                 # (B, ld, d)
 
-        # --- GlobalMaxPooling ---
+
         pooled_prot, _ = weighted_prot.max(dim=1)      # (B, d)
         pooled_drug, _ = weighted_drug.max(dim=1)      # (B, d)
 
@@ -228,17 +221,17 @@ class DeepCDA(nn.Module):
         :return aff: model's affinity prediction
         """
 
-        drug_embedding = self.drug_embedder(drug_seq) # B,L_d,E
-        protein_embedding = self.protein_embedder(protein_seq) # B,L_p,E
+        drug_embedding = self.drug_embedder(drug_seq) # (B,L_d,E)
+        protein_embedding = self.protein_embedder(protein_seq) # (B,L_p,E)
 
-        drug_x = self.drug_conv(drug_embedding.permute(0,2,1)) # B, out_dim*3, L_d'
-        drug_conv = drug_x.permute(0,2,1) # B, L_d', out_dim*3
-        drug_lstm, _ = self.drug_lstm(drug_conv) # B, L_d', out_dim*3
+        drug_x = self.drug_conv(drug_embedding.permute(0,2,1)) # (B,out_dim*3,L_d')
+        drug_conv = drug_x.permute(0,2,1) # (B,L_d',out_dim*3)
+        drug_lstm, _ = self.drug_lstm(drug_conv) # (B,L_d',out_dim*3)
 
 
-        protein_x = self.protein_conv(protein_embedding.permute(0,2,1))# B, out_dim*3, L_p'
-        protein_conv =protein_x.permute(0,2,1) # B, L_p', out_dim*3
-        protein_lstm,_ = self.protein_lstm(protein_conv) # B, L_p', out_dim*3
+        protein_x = self.protein_conv(protein_embedding.permute(0,2,1))# (B,out_dim*3,L_p')
+        protein_conv =protein_x.permute(0,2,1) # (B,L_p',out_dim*3)
+        protein_lstm,_ = self.protein_lstm(protein_conv) # (B,L_p',out_dim*3)
 
         # print(drug_lstm.shape, protein_lstm.shape)
         if self.method_type=='paper':
@@ -285,10 +278,6 @@ class Discriminator(nn.Module):
 
         return self.net(F)
 
-
-
-
-        
 
 
 if __name__=='__main__':
