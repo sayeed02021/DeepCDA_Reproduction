@@ -1,8 +1,8 @@
 # DeepCDA Reproduction
-
+Original Work Link: [paper](https://pubmed.ncbi.nlm.nih.gov/32462178/), [github](https://github.com/LBBSoft/DeepCDA/tree/master)
+---
 Download the dataset from here:\
 https://drive.google.com/open?id=15KotSJWknMOAnHM68RpOh_rqMISsMwsE
----
 ## Environment setup
 Install [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install/overview) to create a `conda` environment.\
 To create a conda environment and install libraries used in this project do the following(make sure you are inside the DeepCDA_Reproduction folder): 
