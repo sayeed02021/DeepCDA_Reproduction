@@ -63,13 +63,13 @@ def getloaders(dataset, fold, batch_size, mode='train'):
     print("Length of train, val, test: ", len(train_data), len(val_data), len(test_data))
     
     train_loader = DataLoader(
-        train_data, batch_size=batch_size, shuffle=True
+        train_data, batch_size=batch_size, shuffle=True, drop_last=True
     )
     val_loader = DataLoader(
-        val_data, batch_size = batch_size, shuffle=False
+        val_data, batch_size = batch_size, shuffle=False, drop_last=True
     )
     test_loader = DataLoader(
-        test_data, batch_size = batch_size, shuffle=False
+        test_data, batch_size = batch_size, shuffle=False, drop_last=True
     )
     return train_loader, val_loader, test_loader
 

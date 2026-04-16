@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-import itertools
 import argparse
 import yaml
 
@@ -159,6 +158,7 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args, sc
     data = {}
     data['Dataset'] = [args.dataset]
     data['method'] = [args.method]
+    data['batch_ratio'] = [args.batch_ratio]
     data['protein_k'] = [protein_k]
     data['smiles_k'] = [smiles_k]
     data['out_dim'] = [out_dim]
@@ -168,17 +168,17 @@ def test_and_compute_metrics(protein_k, smiles_k, out_dim, save_folder, args, sc
     data['r2'] = r2
     data['rm_sq_mean'] = [Rm_fold_wise.mean()]
     data['rm_sq_std'] = [Rm_fold_wise.std()]
-    data['ci_sq_mean'] = [ci_fold_wise.mean()]
-    data['ci_sq_std'] = [ci_fold_wise.std()]
-    data['aupr_sq_mean'] = [ci_fold_wise.mean()]
-    data['aupr_sq_std'] = [ci_fold_wise.std()]
+    data['ci_mean'] = [ci_fold_wise.mean()]
+    data['ci_std'] = [ci_fold_wise.std()]
+    data['aupr_mean'] = [aupr_fold_wise.mean()]
+    data['aupr_std'] = [aupr_fold_wise.std()]
     df = pd.DataFrame(data)
-    if os.path.exists('metrics_updated.csv'):
-        original_data = pd.read_csv('metrics_updated.csv')
+    if os.path.exists('metrics_updated2.csv'):
+        original_data = pd.read_csv('metrics_updated2.csv')
         original_data = pd.concat([original_data, df])
-        original_data.to_csv('metrics_updated.csv', index=False)
+        original_data.to_csv('metrics_updated2.csv', index=False)
     else:
-        df.to_csv('metrics_updated.csv', index=False)
+        df.to_csv('metrics_updated2.csv', index=False)
 
 
 
@@ -199,8 +199,8 @@ def main():
                         save_folder = f'{args.save_folder}/SETTING_{setting_number}'
                         os.makedirs(save_folder, exist_ok=True)
                         setting_data = {}
-                        setting_data['Setting'] = ['protein_filter', 'smiles_filter', 'num_filters', 'lr']
-                        setting_data['Values'] = [protein_k, smiles_k, out_dim, lr]
+                        setting_data['Setting'] = ['protein_filter', 'smiles_filter', 'num_filters', 'lr', 'method', 'batch_ratio']
+                        setting_data['Values'] = [protein_k, smiles_k, out_dim, lr, args.method, args.batch_ratio]
                         setting_df = pd.DataFrame(setting_data)
                         setting_df.to_csv(f'{save_folder}/settings.txt', sep=" ", index=False)
                         for fold in range(args.n_folds):
@@ -221,8 +221,10 @@ def main():
             for smiles_k in args.smiles_k:
                 for out_dim in args.out_dim:
                     for lr in args.lr:  
-                        # save_folder = args.save_folder+f'/SETTING_{i+1}' # change this if using anyother folder like args.save_folder + "SETTING_1" etc
-                        save_folder = args.save_folder 
+                        save_folder = args.save_folder+f'/SETTING_{i+1}' 
+                        if not os.path.exists(save_folder):
+                            save_folder = args.save_folder
+                        # save_folder = args.save_folder 
                         i+=1
                         test_and_compute_metrics(
                             protein_k=protein_k,

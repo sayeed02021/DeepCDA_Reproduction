@@ -8,7 +8,7 @@ import argparse
 import yaml
 import copy
 from natsort import natsorted
-
+import itertools
 from models import DeepCDA, Discriminator
 from ada_train_utils import train_discriminator, train_test_encoder
 from dataset import getloaders
@@ -47,26 +47,29 @@ def train_encoder_and_discriminator(
         enc_optmizer: torch.optim.Optimizer,
         disc_optimizer: torch.optim.Optimizer,
         epoch: int,
-        device:str='cpu'
+        device:str='cpu',
+        batch_ratio:float=1.0
 ):
-    disc_loss = train_discriminator(
-        train_encoder=train_encoder,
-        test_encoder=test_encoder,
-        discriminator=discriminator,
-        train_loader=train_loader,
-        test_loader=test_loader,
-        disc_optimizer=disc_optimizer,
-        epoch=epoch,
-        device=device
+    for _ in range(2):
+        disc_loss = train_discriminator(
+            train_encoder=train_encoder,
+            test_encoder=test_encoder,
+            discriminator=discriminator,
+            train_loader=train_loader,
+            test_loader=test_loader,
+            disc_optimizer=disc_optimizer,
+            epoch=epoch,
+            device=device
     )
-
-    enc_loss = train_test_encoder(
-        test_encoder=test_encoder,
-        discriminator=discriminator, 
-        test_loader=test_loader,
-        enc_optimizer=enc_optmizer,
-        epoch=epoch,
-        device=device
+    for _ in range(2):
+        enc_loss = train_test_encoder(
+            test_encoder=test_encoder,
+            discriminator=discriminator, 
+            test_loader=test_loader,
+            enc_optimizer=enc_optmizer,
+            epoch=epoch,
+            device=device,
+            batch_ratio=batch_ratio
     )
 
     return disc_loss, enc_loss
@@ -85,7 +88,7 @@ def main():
         fold_data = {}
         train_loader, _, _ = getloaders(args.train_dataset, fold,
                                         args.batch_size)
-        test_loader, _, _ = getloaders(args.test_dataset, fold,
+        _, _, test_loader = getloaders(args.test_dataset, fold,
                                         args.batch_size)
         
 
@@ -125,6 +128,7 @@ def main():
         disc_optimizer=torch.optim.Adam(discriminator.parameters(), lr = args.lr_disc)
         print('Starting adversarial training')
         for epoch in range(args.n_epochs):
+            
             disc_loss, enc_loss = train_encoder_and_discriminator(
                 train_encoder=train_encoder,
                 test_encoder=test_encoder,
@@ -134,7 +138,8 @@ def main():
                 enc_optmizer=enc_optmizer,
                 disc_optimizer=disc_optimizer,
                 device = args.device,
-                epoch=epoch+1
+                epoch=epoch+1,
+                batch_ratio=args.batch_ratio
 
             )
 
